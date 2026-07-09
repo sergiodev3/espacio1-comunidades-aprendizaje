@@ -12,7 +12,6 @@
   --crema: #faf7f0;
   --papel: #ffffff;
   --tinta: #33322e;
-  --error: #c0392b;
   --sombra: 0 2px 10px rgba(43, 43, 43, 0.10);
 }
 
@@ -221,22 +220,6 @@ h1 .subtitle {
 .card.revealed { border-style: dashed; }
 .card.revealed .drop { border-style: dashed; }
 
-.card.shake { animation: shake 0.5s; }
-
-.card.flash-error { animation: flashError 0.6s; }
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-7px); }
-  40% { transform: translateX(7px); }
-  60% { transform: translateX(-5px); }
-  80% { transform: translateX(5px); }
-}
-
-@keyframes flashError {
-  0%, 100% { border-color: #e4ded1; background: var(--papel); }
-  30% { border-color: var(--error); background: #fdeceb; }
-}
 
 /* Zona circular donde se suelta el icono */
 
@@ -258,7 +241,11 @@ h1 .subtitle {
   transform: scale(1.1);
 }
 
-.drop.filled { border-style: solid; border-color: var(--cat-color); }
+/* Ocupado (correcto o aún por confirmar): borde neutro, no delata la categoría */
+.drop.filled { border-style: solid; border-color: #8b8574; }
+
+/* Anclado de forma definitiva (respuesta correcta) */
+.drop.locked { border-color: var(--cat-color); }
 
 .drop .token {
   width: 100%;

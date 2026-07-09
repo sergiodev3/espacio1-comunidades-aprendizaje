@@ -138,7 +138,6 @@
   }
 
   const playSuccess = () => { tone(660, 0, 0.18); tone(880, 0.12, 0.28); };
-  const playError = () => { tone(220, 0, 0.22, "triangle"); tone(165, 0.1, 0.3, "triangle"); };
   const playFanfare = () => {
     [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.14, 0.35, "sine", 0.18));
   };
@@ -188,6 +187,7 @@
         token.setAttribute("aria-label", cat.nombre);
         token.innerHTML = cat.icon;
         slot.appendChild(token);
+        token._home = slot;
         el.tray.appendChild(slot);
       }
     }
@@ -200,6 +200,18 @@
 
   /* ---------- Drag & drop con Pointer Events ---------- */
 
+  // Convierte un token en reposo en un elemento flotante posicionado
+  // exactamente donde ya estaba, listo para animarse o seguir el puntero.
+  function floatToken(token, rect) {
+    token.style.width = rect.width + "px";
+    token.style.height = rect.height + "px";
+    token.style.position = "fixed";
+    token.style.left = rect.left + "px";
+    token.style.top = rect.top + "px";
+    token.style.margin = "0";
+    document.body.appendChild(token);
+  }
+
   function onPointerDown(e) {
     const token = e.target.closest(".token");
     if (!token || token.classList.contains("placed") || drag || state.revealed) return;
@@ -208,9 +220,11 @@
     e.preventDefault();
 
     const rect = token.getBoundingClientRect();
+    if (token.parentElement.classList.contains("drop")) {
+      token.parentElement.classList.remove("filled");
+    }
     drag = {
       token,
-      slot: token.parentElement,
       pointerId: e.pointerId,
       dx: e.clientX - rect.left,
       dy: e.clientY - rect.top,
@@ -218,14 +232,8 @@
       h: rect.height,
     };
 
-    token.style.width = rect.width + "px";
-    token.style.height = rect.height + "px";
-    token.style.position = "fixed";
-    token.style.left = rect.left + "px";
-    token.style.top = rect.top + "px";
-    token.style.margin = "0";
+    floatToken(token, rect);
     token.classList.add("dragging");
-    document.body.appendChild(token);
 
     document.addEventListener("pointermove", onPointerMove);
     document.addEventListener("pointerup", onPointerUp);
@@ -261,7 +269,7 @@
 
   function onPointerUp(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
-    const { token, slot } = drag;
+    const { token } = drag;
     endDragListeners();
     clearHighlights();
 
@@ -269,13 +277,13 @@
     if (card) {
       state.attempts++;
       if (card.dataset.cat === token.dataset.cat) {
-        acceptToken(token, slot, card.querySelector(".drop"), card);
+        acceptToken(token, card);
       } else {
-        rejectToken(token, slot, card);
+        parkToken(token, card);
       }
       updateScoreboard();
     } else {
-      flyBack(token, slot);
+      flyBack(token, token._home, { w: drag.w, h: drag.h });
     }
     drag = null;
   }
@@ -284,7 +292,7 @@
     if (!drag || e.pointerId !== drag.pointerId) return;
     endDragListeners();
     clearHighlights();
-    flyBack(drag.token, drag.slot);
+    flyBack(drag.token, drag.token._home, { w: drag.w, h: drag.h });
     drag = null;
   }
 
@@ -305,36 +313,56 @@
     token.style.transition = "";
   }
 
-  function acceptToken(token, slot, zone, card) {
+  // Ancla el icono de forma permanente: respuesta correcta.
+  function acceptToken(token, card) {
+    const drop = card.querySelector(".drop");
     clearDragStyles(token);
     token.classList.add("placed");
-    zone.appendChild(token);
-    zone.classList.add("filled");
+    drop.appendChild(token);
+    drop.classList.add("filled", "locked");
     card.classList.add("solved");
-    slot.classList.add("empty");
+    token._home.classList.add("empty");
     state.score++;
     playSuccess();
     if (state.score === TOTAL) setTimeout(finish, 500);
   }
 
-  function rejectToken(token, slot, card) {
-    playError();
-    card.classList.add("shake", "flash-error");
-    setTimeout(() => card.classList.remove("shake", "flash-error"), 650);
-    flyBack(token, slot);
+  // Deja el icono colocado (sin marcar acierto/error) para que el grupo lo
+  // discuta; sigue siendo arrastrable para volver a intentarlo. Si el
+  // círculo ya tenía otro icono equivocado, ese regresa a la bandeja.
+  function parkToken(token, card) {
+    const drop = card.querySelector(".drop");
+    const existing = drop.querySelector(".token");
+    if (existing) returnToHome(existing);
+    clearDragStyles(token);
+    drop.appendChild(token);
+    drop.classList.add("filled");
+    token._home.classList.add("empty");
   }
 
-  function flyBack(token, slot) {
-    const target = slot.getBoundingClientRect();
+  // Envía un token que ya está en reposo (bandeja o círculo) de vuelta a su
+  // casillero de origen, con la misma animación que un soltado inválido.
+  function returnToHome(token) {
+    const rect = token.getBoundingClientRect();
+    if (token.parentElement.classList.contains("drop")) {
+      token.parentElement.classList.remove("filled");
+    }
+    floatToken(token, rect);
+    flyBack(token, token._home, { w: rect.width, h: rect.height });
+  }
+
+  function flyBack(token, homeSlot, size) {
+    const target = homeSlot.getBoundingClientRect();
     const done = () => {
       clearDragStyles(token);
-      slot.appendChild(token);
+      homeSlot.appendChild(token);
+      homeSlot.classList.remove("empty");
     };
     token.style.transition = "left 0.45s cubic-bezier(0.34,1.56,0.64,1), top 0.45s cubic-bezier(0.34,1.56,0.64,1)";
     // Forzar reflow para que la transición aplique desde la posición actual
     void token.offsetWidth;
-    token.style.left = target.left + (target.width - drag.w) / 2 + "px";
-    token.style.top = target.top + (target.height - drag.h) / 2 + "px";
+    token.style.left = target.left + (target.width - size.w) / 2 + "px";
+    token.style.top = target.top + (target.height - size.h) / 2 + "px";
     let finished = false;
     const finishOnce = () => { if (!finished) { finished = true; done(); } };
     token.addEventListener("transitionend", finishOnce, { once: true });
@@ -408,13 +436,17 @@
     state.revealed = true;
     document.querySelectorAll(".card:not(.solved)").forEach((card) => {
       const drop = card.querySelector(".drop");
-      const token = document.querySelector(`.tray .token[data-cat="${card.dataset.cat}"]:not(.placed)`);
+      // Busca el token en cualquier parte: bandeja o un círculo donde haya
+      // quedado colocado (correcta o incorrectamente) mientras se jugaba.
+      const token = document.querySelector(`.token[data-cat="${card.dataset.cat}"]:not(.placed)`);
       if (token) {
-        token.parentElement.classList.add("empty");
+        const prevHome = token.parentElement;
+        if (prevHome.classList.contains("drop")) prevHome.classList.remove("filled");
+        else prevHome.classList.add("empty");
         token.classList.add("placed");
         drop.appendChild(token);
       }
-      drop.classList.add("filled");
+      drop.classList.add("filled", "locked");
       card.classList.add("solved", "revealed");
     });
     el.revealBtn.disabled = true;
